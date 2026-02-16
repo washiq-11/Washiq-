@@ -48,8 +48,17 @@ module.exports = {
       const prefix = global.GoatBot.config.prefix || "/";
 
       try {
+        const approvedMessage = 
+`✧ ೃ༄ ──── ୨ 🎀 ୧ ──── ✧ ೃ༄
+🐾✨ 𝐘𝐨𝐮𝐫 𝐆𝐫𝐨𝐮𝐩 𝐇𝐚𝐬 𝐁𝐞𝐞𝐧 𝐀𝐩𝐩𝐫𝐨𝐯𝐞𝐝 ✨🐾
+
+💫 𝐀𝐩𝐩𝐫𝐨𝐯𝐞𝐝 𝐁𝐲 : 𝐖𝐚𝐬𝐡𝐢𝐪
+
+🍭 𝐓𝐲𝐩𝐞 ${prefix}𝐡𝐞𝐥𝐩 𝐭𝐨 𝐬𝐞𝐞 𝐚𝐥𝐥 𝐜𝐨𝐦𝐦𝐚𝐧𝐝𝐬! 💖
+✧ ೃ༄ ──── ୨ 🧸 ୧ ──── ✧ ೃ༄`;
+
         await api.sendMessage(
-          `✓ Group approved! Type ${prefix}help to see available commands.`,
+          approvedMessage,
           group.threadID
         );
 
