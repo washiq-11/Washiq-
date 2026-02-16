@@ -3,149 +3,132 @@ const fs = require("fs-extra");
 const path = require("path");
 const crypto = require("crypto");
 
-const QUIZ_URL =
-  "https://raw.githubusercontent.com/washik02/Washiq-/0f620bc71d05e0d67912470c044bd49eaaa84827/quiz.json";
+const QUIZ_URL = "https://raw.githubusercontent.com/washik02/Washiq-/0f620bc71d05e0d67912470c044bd49eaaa84827/quiz.json";
+const CACHE_PATH = path.join(__dirname, "cache", "quiz_cache.json");
+const REWARD_AMOUNT = 200;
 
-const cacheDir = path.join(__dirname, "cache");
-const cacheFile = path.join(cacheDir, "quiz_cache.json");
-
-const REWARD = 200;
-
-function normalizeAnswer(input) {
-  if (!input) return "";
-  const s = String(input).trim().toLowerCase();
-  if (["a", "b", "c", "d"].includes(s)) return s;
-  if (["1", "2", "3", "4"].includes(s)) return ["a", "b", "c", "d"][Number(s) - 1];
-  return "";
+/**
+ * Clean options to prevent "A. A. Answer" formatting issues
+ */
+function formatOption(text) {
+    if (!text) return "N/A";
+    return String(text).replace(/^\s*[A-D]\s*\.\s*/i, "").trim();
 }
 
-function cleanOptionText(opt) {
-  return String(opt || "").replace(/^\s*[ABCD]\.\s*/i, "").trim();
+/**
+ * Generate a unique ID for each question to track usage
+ */
+function getQuestionId(q) {
+    const hashData = `${q.question}${JSON.stringify(q.options)}`;
+    return crypto.createHash("sha1").update(hashData).digest("hex");
 }
 
-function qidOf(questionObj) {
-  const base = JSON.stringify({
-    q: questionObj?.question || "",
-    o: questionObj?.options || []
-  });
-  return crypto.createHash("sha1").update(base).digest("hex");
-}
-
-async function fetchQuizData() {
-  await fs.ensureDir(cacheDir);
-  try {
-    const res = await axios.get(`${QUIZ_URL}?v=${Date.now()}`, { timeout: 12000 });
-    const data = res.data;
-    if (!Array.isArray(data) || data.length === 0) throw new Error("Invalid quiz data");
-    await fs.writeJson(cacheFile, data, { spaces: 2 });
-    return data;
-  } catch {
-    if (await fs.pathExists(cacheFile)) return await fs.readJson(cacheFile);
-    throw new Error("Quiz load failed");
-  }
-}
-
-function pickQuestionNoRepeat(questions, usedSet) {
-  const unused = questions.filter(q => !usedSet.has(qidOf(q)));
-  if (unused.length === 0) return null;
-  return unused[Math.floor(Math.random() * unused.length)];
+async function getQuestions() {
+    try {
+        const response = await axios.get(QUIZ_URL, { timeout: 10000 });
+        const data = response.data;
+        if (Array.isArray(data)) {
+            await fs.ensureDir(path.dirname(CACHE_PATH));
+            await fs.writeJson(CACHE_PATH, data);
+            return data;
+        }
+    } catch (error) {
+        if (await fs.pathExists(CACHE_PATH)) {
+            return await fs.readJson(CACHE_PATH);
+        }
+    }
+    return null;
 }
 
 module.exports = {
-  config: {
-    name: "qz",
-    aliases: ["quiz"],
-    version: "6.0.1",
-    author: "Washiq",
-    countDown: 5,
-    role: 0,
-    description: "Quiz system (no repeat per-user until all used)",
-    category: "fun",
-    guide: "{pn}"
-  },
+    config: {
+        name: "qz",
+        aliases: ["quiz", "trivia"],
+        version: "6.1.0",
+        author: "Washiq Adnan",
+        countDown: 5,
+        role: 0,
+        description: "Intelligent quiz system with anti-duplicate logic",
+        category: "entertainment",
+        guide: { en: "{pn}" }
+    },
 
-  onStart: async function ({ message, event, usersData }) {
-    try {
-      const questions = await fetchQuizData();
+    onStart: async function ({ message, event, usersData }) {
+        const questions = await getQuestions();
+        if (!questions) return message.reply("Failed to load quiz data. Please try again later.");
 
-      const user = await usersData.get(event.senderID);
-      const data = user.data || {};
-      const quizData = data.quizQz || {};
-      let used = Array.isArray(quizData.used) ? quizData.used : [];
-
-      const allIds = new Set(questions.map(qidOf));
-      used = used.filter(id => allIds.has(id));
-      const usedSet = new Set(used);
-
-      let q = pickQuestionNoRepeat(questions, usedSet);
-      if (!q) {
-        used = [];
-        usedSet.clear();
-        q = questions[Math.floor(Math.random() * questions.length)];
-      }
-
-      const qid = qidOf(q);
-      used.push(qid);
-
-      await usersData.set(event.senderID, {
-        data: {
-          ...data,
-          quizQz: { ...quizData, used }
+        const userData = await usersData.get(event.senderID);
+        const state = userData.data?.quizState || { used: [] };
+        
+        // Filter out questions the user has already answered
+        let pool = questions.filter(q => !state.used.includes(getQuestionId(q)));
+        
+        // Reset pool if all questions are finished
+        if (pool.length === 0) {
+            state.used = [];
+            pool = questions;
         }
-      });
 
-      const options = (q.options || []).map(cleanOptionText);
-      const text = [
-        "🧠 QUIZ",
-        `\n❓ ${q.question}\n`,
-        `A. ${options[0] || "—"}`,
-        `B. ${options[1] || "—"}`,
-        `C. ${options[2] || "—"}`,
-        `D. ${options[3] || "—"}`,
-        "\nReply with: a/b/c/d (or 1/2/3/4)"
-      ].join("\n");
+        const selected = pool[Math.floor(Math.random() * pool.length)];
+        const qid = getQuestionId(selected);
+        
+        state.used.push(qid);
+        await usersData.set(event.senderID, {
+            data: { ...userData.data, quizState: state }
+        });
 
-      const sent = await message.reply(text);
+        const opts = (selected.options || []).map(formatOption);
+        const quizUI = [
+            "🧠 𝗤𝗨𝗜𝗭 𝗧𝗜𝗠𝗘",
+            "━━━━━━━━━━━━━━━━━━",
+            `❓ ${selected.question}`,
+            "",
+            `🄰. ${opts[0] || "—"}`,
+            `🄱. ${opts[1] || "—"}`,
+            `🄲. ${opts[2] || "—"}`,
+            `🄳. ${opts[3] || "—"}`,
+            "━━━━━━━━━━━━━━━━━━",
+            "💬 Reply with A, B, C, or D"
+        ].join("\n");
 
-      global.GoatBot = global.GoatBot || {};
-      global.GoatBot.onReply = global.GoatBot.onReply || new Map();
+        return message.reply(quizUI, (err, info) => {
+            if (err) return;
+            global.GoatBot.onReply.set(info.messageID, {
+                commandName: this.config.name,
+                author: event.senderID,
+                answer: String(selected.answer).toLowerCase().trim(),
+                reward: REWARD_AMOUNT
+            });
+        });
+    },
 
-      global.GoatBot.onReply.set(sent.messageID, {
-        commandName: "qz",
-        author: event.senderID,
-        correct: String(q.answer || "").toLowerCase(),
-        reward: REWARD
-      });
+    onReply: async function ({ message, event, Reply, usersData }) {
+        const { author, answer, reward } = Reply;
 
-    } catch (err) {
-      console.error(err);
-      message.reply("Quiz failed to load.");
+        if (event.senderID !== author) {
+            return message.reply("This session belongs to someone else. Type 'qz' to start your own!");
+        }
+
+        const input = event.body.trim().toLowerCase();
+        const validInputs = { "1": "a", "2": "b", "3": "c", "4": "d", "a": "a", "b": "b", "c": "c", "d": "d" };
+        const userAnswer = validInputs[input];
+
+        if (!userAnswer) {
+            return message.reply("Invalid choice! Please reply with A, B, C, or D.");
+        }
+
+        // Clean up the reply listener
+        global.GoatBot.onReply.delete(event.messageReply.messageID);
+
+        if (userAnswer === answer) {
+            const currentMoney = await usersData.get(event.senderID, "money") || 0;
+            const newBalance = Number(currentMoney) + reward;
+            
+            await usersData.set(event.senderID, { money: newBalance });
+            return message.reply(`✅ Correct!\n💰 Reward: +$${reward}\n💳 New Balance: $${newBalance}`);
+        } else {
+            return message.reply(`❌ Wrong answer!\n💡 The correct one was: ${answer.toUpperCase()}`);
+        }
     }
-  },
-
-  onReply: async function ({ message, event, Reply, usersData }) {
-    if (event.senderID !== Reply.author) {
-      return message.reply("Oops baby, this is not your quiz 🥺");
-    }
-
-    const ans = normalizeAnswer(event.body);
-    if (!ans) return message.reply("Reply with a/b/c/d (or 1/2/3/4).");
-
-    const correct = String(Reply.correct || "").toLowerCase();
-
-    if (ans === correct) {
-      let money = await usersData.get(event.senderID, "money");
-      if (typeof money !== "number") money = 0;
-
-      const newMoney = money + Number(Reply.reward || 0);
-      await usersData.set(event.senderID, { money: newMoney });
-
-      return message.reply(
-        `✅ Correct!\nReward: +${Reply.reward}$\nNew Balance: ${newMoney}$`
-      );
-    }
-
-    return message.reply(`❌ Wrong!\nCorrect Answer: ${correct.toUpperCase()}`);
-  }
 };
-```0
+  
