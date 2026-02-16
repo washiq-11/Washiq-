@@ -79,17 +79,27 @@ module.exports = {
     guide: { en: "{pn}" }
   },
 
-  onStart: async function ({ message, usersData }) {
+  onStart: async function ({ message, usersData, event }) {
     try {
+      message.reaction("⏳", event.messageID);
+      
       const all = await usersData.getAll();
+      
       const top15 = all
-        .map(u => ({ id: u.userID, name: u.name || "Unknown", money: Number(u.money || 0) }))
+        .filter(u => u && u.money && Number(u.money) > 0)
+        .map(u => ({ 
+          id: u.userID, 
+          name: u.name || "Unknown User", 
+          money: Number(u.money) || 0 
+        }))
         .sort((a, b) => b.money - a.money)
         .slice(0, 15);
 
-      if (!top15.length) return message.reply("No user data found.");
+      if (!top15.length) {
+        message.reaction("❌", event.messageID);
+        return message.reply(" ");
+      }
 
-      // ১০৮০ x ২৩৪০ রেজোলিউশন
       const width = 1080;
       const height = 2340;
       const canvas = createCanvas(width, height);
@@ -99,7 +109,7 @@ module.exports = {
       const shimmer = (Math.sin(seed) + 1) / 2;
       const pulse = (Math.cos(seed * 1.2) + 1) / 2;
 
-      // BACKGROUND
+      // Background
       const bg = ctx.createLinearGradient(0, 0, 0, height);
       bg.addColorStop(0, "#050816");
       bg.addColorStop(0.5, "#0a1224");
@@ -107,147 +117,164 @@ module.exports = {
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, width, height);
 
-      // OUTER FRAME
+      // Title - Normal Font
       ctx.save();
-      ctx.strokeStyle = `rgba(34,197,94,${0.28 + pulse * 0.30})`;
-      ctx.lineWidth = 6;
-      ctx.shadowColor = "rgba(34,197,94,0.75)";
-      ctx.shadowBlur = 35;
-      drawRoundRect(ctx, 30, 30, width - 60, height - 60, 50);
-      ctx.stroke();
-      ctx.restore();
-
-      // TITLE
-      ctx.save();
-      ctx.font = "bold 85px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#FFD700";
       ctx.shadowColor = "rgba(255,215,0,0.85)";
       ctx.shadowBlur = 30;
-      ctx.fillText("RICHEST USERS", width / 2, 250);
-      ctx.font = "35px sans-serif";
-      ctx.fillStyle = "rgba(255,255,255,0.35)";
-      ctx.fillText("Top 15 • Live Ranking", width / 2, 320);
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+      ctx.font = "bold 80px 'Arial', sans-serif";
+      ctx.fillStyle = "#FFD700";
+      ctx.textAlign = "center";
+      ctx.fillText("TOP 15 RICHEST", width / 2, 180);
       ctx.restore();
 
-      // TOP 3 CARDS (Original Style)
+      // Top 3 Cards
       const cardW = 320;
       const cardH = 380;
-      const topY = 450;
+      const topY = 300;
+      
       const positions = [
-        { idx: 1, x: width / 2 - cardW / 2, type: "gold", label: "1ST" },
-        { idx: 0, x: 60, type: "silver", label: "2ND" },
-        { idx: 2, x: width - cardW - 60, type: "bronze", label: "3RD" }
+        { idx: 0, x: width / 2 - cardW / 2, type: "gold", label: "1st" },
+        { idx: 1, x: 60, type: "silver", label: "2nd" },
+        { idx: 2, x: width - cardW - 60, type: "bronze", label: "3rd" }
       ];
 
       for (const p of positions) {
         const user = top15[p.idx];
         if (!user) continue;
 
+        // Card background
         ctx.save();
         drawRoundRect(ctx, p.x, topY, cardW, cardH, 30);
         ctx.fillStyle = cardGradient(ctx, p.x, topY, cardW, cardH, p.type, shimmer);
         ctx.fill();
-        ctx.fillStyle = "rgba(0,0,0,0.2)";
-        drawRoundRect(ctx, p.x, topY, cardW, cardH, 30);
-        ctx.fill();
         ctx.restore();
 
-        // Label
+        // Rank label
         ctx.save();
-        ctx.fillStyle = "rgba(0,0,0,0.4)";
-        drawRoundRect(ctx, p.x + 20, topY + 20, 80, 45, 15);
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        drawRoundRect(ctx, p.x + 20, topY + 20, 80, 40, 15);
         ctx.fill();
         ctx.fillStyle = "#fff";
-        ctx.font = "bold 22px sans-serif";
+        ctx.font = "bold 25px 'Arial', sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(p.label, p.x + 60, topY + 52);
+        ctx.fillText(p.label, p.x + 60, topY + 48);
         ctx.restore();
 
         // Avatar
         const ax = p.x + cardW / 2;
         const ay = topY + 160;
         const av = await getFBAvatar(user.id);
+        
         ctx.save();
-        clipCircle(ctx, ax, ay, 80);
-        if (av) ctx.drawImage(av, ax - 80, ay - 80, 160, 160);
+        clipCircle(ctx, ax, ay, 75);
+        if (av) {
+          ctx.drawImage(av, ax - 75, ay - 75, 150, 150);
+        } else {
+          ctx.fillStyle = "#333";
+          ctx.fill();
+          ctx.fillStyle = "#fff";
+          ctx.font = "70px 'Arial', sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("?", ax, ay);
+        }
         ctx.restore();
 
-        // Ring & Online Dot
+        // Ring
         ctx.strokeStyle = `rgba(34,197,94,${0.35 + pulse * 0.25})`;
         ctx.lineWidth = 5;
         ctx.beginPath();
-        ctx.arc(ax, ay, 85, 0, Math.PI * 2);
+        ctx.arc(ax, ay, 80, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.beginPath();
-        ctx.arc(ax + 60, ay + 60, 14, 0, Math.PI * 2);
-        ctx.fillStyle = "#22c55e";
-        ctx.fill();
-        ctx.stroke();
-
-        // Name & Money
+        // Name
         ctx.textAlign = "center";
         ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 32px sans-serif";
-        ctx.fillText(user.name.slice(0, 15), ax, topY + 300);
+        ctx.font = "bold 28px 'Arial', sans-serif";
+        ctx.fillText(user.name.length > 15 ? user.name.slice(0, 12) + "..." : user.name, ax, topY + 300);
+
+        // Money
         ctx.fillStyle = "#fbbf24";
-        ctx.font = "bold 30px sans-serif";
-        ctx.fillText(`${formatShort(user.money)}${CURRENCY_SYMBOL}`, ax, topY + 350);
+        ctx.font = "bold 30px 'Arial', sans-serif";
+        ctx.fillText(`${formatShort(user.money)} ${CURRENCY_SYMBOL}`, ax, topY + 350);
       }
 
-      // LIST 4-15
+      // List 4-15
       const listX = 60;
-      const listY = 950;
+      const listY = 800;
       const listW = width - 120;
-      const rowH = 105;
+      const rowH = 85;
 
       for (let i = 3; i < top15.length; i++) {
         const u = top15[i];
         const y = listY + (i - 3) * rowH;
+        const rank = i + 1;
 
+        // Row background
         if (i % 2 === 0) {
-          ctx.fillStyle = "rgba(255,255,255,0.04)";
-          drawRoundRect(ctx, listX, y - 60, listW, 85, 20);
+          ctx.fillStyle = "rgba(255,255,255,0.05)";
+          drawRoundRect(ctx, listX, y - 35, listW, 70, 15);
           ctx.fill();
         }
 
+        // Rank number
         ctx.textAlign = "left";
         ctx.fillStyle = "#60a5fa";
-        ctx.font = "bold 35px sans-serif";
-        ctx.fillText(`#${i + 1}`, listX + 40, y);
+        ctx.font = "bold 30px 'Arial', sans-serif";
+        ctx.fillText(`#${rank}`, listX + 20, y);
 
+        // Avatar for list
         const av = await getFBAvatar(u.id);
         ctx.save();
-        clipCircle(ctx, listX + 160, y - 12, 30);
-        if (av) ctx.drawImage(av, listX + 130, y - 42, 60, 60);
+        clipCircle(ctx, listX + 120, y - 15, 25);
+        if (av) {
+          ctx.drawImage(av, listX + 95, y - 40, 50, 50);
+        } else {
+          ctx.fillStyle = "#333";
+          ctx.fill();
+          ctx.fillStyle = "#fff";
+          ctx.font = "25px 'Arial', sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("?", listX + 120, y - 15);
+        }
         ctx.restore();
 
+        // Name
         ctx.fillStyle = "#e5e7eb";
-        ctx.font = "35px sans-serif";
-        ctx.fillText(u.name.slice(0, 22), listX + 220, y);
+        ctx.font = "28px 'Arial', sans-serif";
+        ctx.fillText(u.name.length > 20 ? u.name.slice(0, 17) + "..." : u.name, listX + 170, y);
 
+        // Money
         ctx.textAlign = "right";
         ctx.fillStyle = "#fbbf24";
-        ctx.font = "bold 35px sans-serif";
-        ctx.fillText(`${formatShort(u.money)}${CURRENCY_SYMBOL}`, listX + listW - 40, y);
+        ctx.font = "bold 30px 'Arial', sans-serif";
+        ctx.fillText(`${formatShort(u.money)} ${CURRENCY_SYMBOL}`, listX + listW - 20, y);
       }
 
-      // FOOTER
+      // Footer
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(255,255,255,0.2)";
-      ctx.font = "30px sans-serif";
-      ctx.fillText("RAHA ECONOMY • LIVE RANK", width / 2, height - 100);
+      ctx.font = "25px 'Arial', sans-serif";
+      ctx.fillText("• • •", width / 2, height - 100);
 
       const out = path.join(CACHE_DIR, `top_${Date.now()}.png`);
       fs.writeFileSync(out, canvas.toBuffer("image/png"));
 
-      await message.reply({ attachment: fs.createReadStream(out) });
+      message.reaction("✅", event.messageID);
+      
+      await message.reply({ 
+        attachment: fs.createReadStream(out) 
+      });
+      
       setTimeout(() => fs.unlink(out).catch(() => {}), 20000);
+      
     } catch (e) {
-      console.error(e);
-      message.reply("Error!");
+      console.error("Top command error:", e);
+      message.reaction("❌", event.messageID);
+      message.reply(" ");
     }
   }
 };
-                                       
