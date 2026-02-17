@@ -1,134 +1,107 @@
 const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
-const crypto = require("crypto");
 
-const QUIZ_URL = "https://raw.githubusercontent.com/washik02/Washiq-/0f620bc71d05e0d67912470c044bd49eaaa84827/quiz.json";
-const CACHE_PATH = path.join(__dirname, "cache", "quiz_cache.json");
+const QUIZ_URL = "https://raw.githubusercontent.com/washik02/Washiq-/main/cartoon.json";
+const CACHE_DIR = path.join(__dirname, "cache");
 const REWARD_AMOUNT = 200;
-
-/**
- * Clean options to prevent "A. A. Answer" formatting issues
- */
-function formatOption(text) {
-    if (!text) return "N/A";
-    return String(text).replace(/^\s*[A-D]\s*\.\s*/i, "").trim();
-}
-
-/**
- * Generate a unique ID for each question to track usage
- */
-function getQuestionId(q) {
-    const hashData = `${q.question}${JSON.stringify(q.options)}`;
-    return crypto.createHash("sha1").update(hashData).digest("hex");
-}
-
-async function getQuestions() {
-    try {
-        const response = await axios.get(QUIZ_URL, { timeout: 10000 });
-        const data = response.data;
-        if (Array.isArray(data)) {
-            await fs.ensureDir(path.dirname(CACHE_PATH));
-            await fs.writeJson(CACHE_PATH, data);
-            return data;
-        }
-    } catch (error) {
-        if (await fs.pathExists(CACHE_PATH)) {
-            return await fs.readJson(CACHE_PATH);
-        }
-    }
-    return null;
-}
 
 module.exports = {
     config: {
-        name: "qz",
-        aliases: ["quiz", "trivia"],
-        version: "6.1.0",
+        name: "cartoon", // আপনি যেটা চাইলেন, একদম সিম্পল নাম
+        aliases: ["cq", "cquiz"],
+        version: "12.0.0",
         author: "Washiq Adnan",
         countDown: 5,
         role: 0,
-        description: "Intelligent quiz system with anti-duplicate logic",
-        category: "entertainment",
+        description: "Guess the cartoon character and win money",
+        category: "game",
         guide: { en: "{pn}" }
     },
 
-    onStart: async function ({ message, event, usersData }) {
-        const questions = await getQuestions();
-        if (!questions) return message.reply("Failed to load quiz data. Please try again later.");
+    onStart: async function ({ api, message, event }) {
+        try {
+            // ১. লোডিং রিঅ্যাকশন (⏳)
+            api.setMessageReaction("⏳", event.messageID, () => {}, true);
 
-        const userData = await usersData.get(event.senderID);
-        const state = userData.data?.quizState || { used: [] };
-        
-        // Filter out questions the user has already answered
-        let pool = questions.filter(q => !state.used.includes(getQuestionId(q)));
-        
-        // Reset pool if all questions are finished
-        if (pool.length === 0) {
-            state.used = [];
-            pool = questions;
-        }
+            const response = await axios.get(`${QUIZ_URL}?t=${Date.now()}`);
+            const quizzes = response.data;
 
-        const selected = pool[Math.floor(Math.random() * pool.length)];
-        const qid = getQuestionId(selected);
-        
-        state.used.push(qid);
-        await usersData.set(event.senderID, {
-            data: { ...userData.data, quizState: state }
-        });
+            if (!Array.isArray(quizzes)) return message.reply("❌ সার্ভার থেকে ডাটা পাওয়া যায়নি।");
 
-        const opts = (selected.options || []).map(formatOption);
-        const quizUI = [
-            "🧠 𝗤𝗨𝗜𝗭 𝗧𝗜𝗠𝗘",
-            "━━━━━━━━━━━━━━━━━━",
-            `❓ ${selected.question}`,
-            "",
-            `🄰. ${opts[0] || "—"}`,
-            `🄱. ${opts[1] || "—"}`,
-            `🄲. ${opts[2] || "—"}`,
-            `🄳. ${opts[3] || "—"}`,
-            "━━━━━━━━━━━━━━━━━━",
-            "💬 Reply with A, B, C, or D"
-        ].join("\n");
+            const selected = quizzes[Math.floor(Math.random() * quizzes.length)];
+            const imgExt = path.extname(selected.image) || ".png";
+            const imgPath = path.join(CACHE_DIR, `cartoon_${event.senderID}${imgExt}`);
+            await fs.ensureDir(CACHE_DIR);
 
-        return message.reply(quizUI, (err, info) => {
-            if (err) return;
-            global.GoatBot.onReply.set(info.messageID, {
-                commandName: this.config.name,
-                author: event.senderID,
-                answer: String(selected.answer).toLowerCase().trim(),
-                reward: REWARD_AMOUNT
+            // ২. ইমেজ ডাউনলোড
+            const imgRes = await axios.get(selected.image, { responseType: "arraybuffer" });
+            await fs.writeFile(imgPath, Buffer.from(imgRes.data));
+
+            const quizUI = [
+                "🖼️ 𝗚𝗨𝗘𝗦𝗦 𝗧𝗛𝗘 𝗖𝗔𝗥𝗧𝗢𝗢𝗡",
+                "━━━━━━━━━━━━━━━━━━",
+                `❓ ${selected.question}`,
+                "",
+                `${selected.options[0]}`,
+                `${selected.options[1]}`,
+                `${selected.options[2]}`,
+                `${selected.options[3]}`,
+                "━━━━━━━━━━━━━━━━━━",
+                `💰 Reward: $${REWARD_AMOUNT}`,
+                "💬 Reply with A, B, C, or D!"
+            ].join("\n");
+
+            // ৩. ইমেজ পাঠানো সফল হলে রিঅ্যাকশন (🖼️)
+            api.setMessageReaction("🖼️", event.messageID, () => {}, true);
+
+            return message.reply({
+                body: quizUI,
+                attachment: fs.createReadStream(imgPath)
+            }, (err, info) => {
+                if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
+                if (err) return;
+
+                global.GoatBot.onReply.set(info.messageID, {
+                    commandName: this.config.name,
+                    author: event.senderID,
+                    answer: selected.answer.toLowerCase().trim()
+                });
             });
-        });
+
+        } catch (error) {
+            api.setMessageReaction("❌", event.messageID, () => {}, true);
+            console.error(error);
+            return message.reply("❌ ইমেজ লোড করতে সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।");
+        }
     },
 
-    onReply: async function ({ message, event, Reply, usersData }) {
-        const { author, answer, reward } = Reply;
+    onReply: async function ({ api, message, event, Reply, usersData }) {
+        const { author, answer } = Reply;
 
-        if (event.senderID !== author) {
-            return message.reply("This session belongs to someone else. Type 'qz' to start your own!");
-        }
+        if (event.senderID !== author) return;
 
         const input = event.body.trim().toLowerCase();
-        const validInputs = { "1": "a", "2": "b", "3": "c", "4": "d", "a": "a", "b": "b", "c": "c", "d": "d" };
-        const userAnswer = validInputs[input];
+        if (!["a", "b", "c", "d"].includes(input)) return;
 
-        if (!userAnswer) {
-            return message.reply("Invalid choice! Please reply with A, B, C, or D.");
-        }
+        global.GoatBot.onReply.delete(Reply.messageID);
 
-        // Clean up the reply listener
-        global.GoatBot.onReply.delete(event.messageReply.messageID);
+        if (input === answer) {
+            try {
+                // ৪. ব্যালেন্স যোগ করা
+                const currentMoney = await usersData.get(event.senderID, "money") || 0;
+                const newBalance = Number(currentMoney) + REWARD_AMOUNT;
+                await usersData.set(event.senderID, { money: newBalance });
 
-        if (userAnswer === answer) {
-            const currentMoney = await usersData.get(event.senderID, "money") || 0;
-            const newBalance = Number(currentMoney) + reward;
-            
-            await usersData.set(event.senderID, { money: newBalance });
-            return message.reply(`✅ Correct!\n💰 Reward: +$${reward}\n💳 New Balance: $${newBalance}`);
+                api.setMessageReaction("✅", event.messageID, () => {}, true);
+                return message.reply(`✅ Correct Answer!\n💰 Reward: +$${REWARD_AMOUNT}\n💳 Balance: $${newBalance}`);
+            } catch (e) {
+                return message.reply("✅ Correct! (Money update failed)");
+            }
         } else {
-            return message.reply(`❌ Wrong answer!\n💡 The correct one was: ${answer.toUpperCase()}`);
+            api.setMessageReaction("❌", event.messageID, () => {}, true);
+            return message.reply(`❌ Wrong Answer!\n💡 The correct was: ${answer.toUpperCase()}`);
         }
     }
 };
-  
+    
