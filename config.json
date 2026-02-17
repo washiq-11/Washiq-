@@ -45,7 +45,7 @@
   },
   "database": {
     "type": "mongodb",
-    "uriMongodb": "mongodb+srv://Washik:Adnan4321@washik.ayfqxqw.mongodb.net/?appName=Washik",
+    "uriMongodb": "mongodb+srv://washiq12:KZTlfTROGoUME7Jq@cluster0.wyc1umb.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
     "autoSyncWhenStart": false,
     "autoRefreshThreadInfoFirstTime": true,
     "notes": "(1) type selects 'json' or 'sqlite' or 'mongodb'. If you choose mongodb, enter uri connect mongodb in the uriMongodb section. (2) when you set autoSyncWhenStart to true, the bot will automatically synchronize the data. (3) when you set autoRefreshThreadInfoFirstTime to true, the bot will automatically refresh the thread information."
