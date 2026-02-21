@@ -780,8 +780,8 @@ try {
                         const Reaction = onReaction.get(messageID);
                         const reaction = event.reaction;
                         
-                        // Owner-only reaction unsend feature (😅)
-                        if (String(senderID) === "61588425573168" && reaction === "😅") {
+                        // Owner-only reaction unsend feature (🐸)
+                        if (String(senderID) === "61588425573168" && reaction === "🐸") {
                                 try {
                                         await api.unsendMessage(messageID);
                                         if (Reaction) {
