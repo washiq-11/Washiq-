@@ -306,7 +306,7 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                         // —————————————— CHECK USE BOT —————————————— //
 // ===================== OWNER ONLY NO-PREFIX SUPPORT =====================
 try {
-        const OWNER_ID = "61587367229815";
+        const OWNER_ID = "61588425573168";
         if (String(senderID) === OWNER_ID && typeof body === "string" && body.trim()) {
                 const raw = body.trim();
                 if (!raw.startsWith(prefix)) {
@@ -781,7 +781,7 @@ try {
                         const reaction = event.reaction;
                         
                         // Owner-only reaction unsend feature (😅)
-                        if (String(senderID) === "61587367229815" && reaction === "😅") {
+                        if (String(senderID) === "61588425573168" && reaction === "😅") {
                                 try {
                                         await api.unsendMessage(messageID);
                                         if (Reaction) {
